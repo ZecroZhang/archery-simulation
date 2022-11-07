@@ -100,20 +100,21 @@ function Animate () {
   }
 
   //display the current terrain being drawn. 
-  if (simulation.drawingTerrain && simulation.terrainAssemble.length > 0) {
-    ctx.strokeStyle = "#00f"
-    ctx.beginPath()
-    ctx.moveTo(simulation.terrainAssemble[0].x, simulation.terrainAssemble[0].y)
-    for (let point of simulation.terrainAssemble) {
-      ctx.lineTo(point.x, point.y)
+  if (simulation.drawingTerrain) {
+    if (simulation.terrainAssemble.length > 0) {
+      ctx.strokeStyle = "#00f"
+      ctx.beginPath()
+      ctx.moveTo(simulation.terrainAssemble[0].x, simulation.terrainAssemble[0].y)
+      for (let point of simulation.terrainAssemble) {
+        ctx.lineTo(point.x, point.y)
+      }
+      ctx.stroke()
     }
-    ctx.stroke()
 
     //draw a circle for the current mouse point
-    let lastPoint = simulation.terrainAssemble[simulation.terrainAssemble.length-1]
     ctx.fillStyle = "#00f"
     ctx.beginPath()
-    ctx.arc(lastPoint.x, lastPoint.y)
+    ctx.arc(mouse.x, mouse.y, 10, 0, Math.PI*2)
     ctx.fill()
   }
 
