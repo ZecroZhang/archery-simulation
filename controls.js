@@ -1,6 +1,45 @@
 ///<reference path="physics.js"/>
+///<reference path="index.js"/>
 ///<reference path="types.ts"/>
 "use strict"
+
+//keyboard controls. 
+document.addEventListener("keydown", event => {
+  //for ease of use space will be treated like a mouse
+  if (event.code == "Space") {
+    HandleMouseDown()
+  }
+})
+document.addEventListener("keyup", event => {
+  //for ease of use space will be treated like a mouse
+  if (event.code == "Space") {
+    HandleMouseUp()
+  }
+})
+
+let item = 0
+document.addEventListener("keypress", event => {
+  //hot keys are for something, they will be removed later. 
+  if (event.code == "Digit1") {
+    if (item == 0) {
+      scFn(100 + Math.random() * 400)
+    } else if (item == 1) {
+      mdFn(0.1 + Math.random() * 0.9)
+    } else if (item == 2) {
+      amFn(0.001 + Math.random() * 0.28)
+    } else if (item == 3) {
+      gFn(Math.random() * 40)
+      item = -1
+    }
+    item ++ 
+  } else if (event.code == "Digit2") {
+    if (simulation.drawingTerrain) {
+      EnableDisableTerrainDrawing()
+    }
+  } else if (event.code == "Digit3") {
+    location.reload()
+  }
+})
 
 /**
  * Mouse position relative to the 1024x1024 canvas
@@ -11,34 +50,52 @@ const mouse = {
   isDown: false
 }
 
-document.addEventListener("mousedown", () => {
-  mouse.isDown = true 
-
-  //mouseup didn't register or something. 
-  if (simulation.bowDrag.projectile !== null) return 
-
-  //Start the bow drag.
-  simulation.bowDrag.isAiming = true
-  simulation.bowDrag.startTime = performance.now()
-
-  let projectile = new Projectile(250 / simulation.pixelsToMeters, 800 / simulation.pixelsToMeters, 0, 0, 1)
-  projectile.gravityEnabled = false
-
-  //so it's oriented correctly 
-  UpdateArrowLastPositionBeforeRelease(projectile)
-  CreateProjectile(projectile)
-
-  simulation.bowDrag.projectile = projectile
-})
+document.addEventListener("mouseup", HandleMouseUp)
+document.addEventListener("mousedown", HandleMouseDown)
 
 document.addEventListener("mousemove", event => {
   let canvasBoundingBox = canvas.getBoundingClientRect()
 
   mouse.x = (event.pageX - canvasBoundingBox.left) / canvasBoundingBox.width * 1024
   mouse.y = (event.pageY - canvasBoundingBox.top) / canvasBoundingBox.height * 1024
+
+  //check if terrain is being drawn. 
+  if (mouse.isDown && simulation.drawingTerrain) {
+    simulation.terrainAssemble.push(new Point(mouse.x, mouse.y))
+  }
 })
 
-document.addEventListener("mouseup", () => {
+
+function HandleMouseDown () {
+  //ignore if it isn't in the canvas. 
+  if (!IsMouseInCanvas()) {
+    return
+  }
+
+  mouse.isDown = true 
+
+  //mouseup didn't register or something. 
+  if (simulation.bowDrag.projectile !== null) return 
+
+  if (simulation.drawingTerrain) {
+    simulation.terrainAssemble.push(new Point(mouse.x, mouse.y))
+  } else {
+    //Start the bow drag.
+    simulation.bowDrag.isAiming = true
+    simulation.bowDrag.startTime = performance.now()
+
+    let projectile = new Projectile(250 / simulation.pixelsToMeters, 800 / simulation.pixelsToMeters, 0, 0, 1)
+    projectile.gravityEnabled = false
+
+    //so it's oriented correctly 
+    UpdateArrowLastPositionBeforeRelease(projectile)
+    CreateProjectile(projectile)
+
+    simulation.bowDrag.projectile = projectile
+  }
+}
+
+function HandleMouseUp () {
   mouse.isDown = false
 
   //shoot the arrow.
@@ -48,12 +105,38 @@ document.addEventListener("mouseup", () => {
 
     arrow.gravityEnabled = true
     arrow.velocity.setTo(CalculateInitialVeclotiy(simulation.bowSpringConstant, BowStretchDistance()/simulation.pixelsToMeters, simulation.arrowMass, angle))
-    //arrow.velocity.x = Math.cos(angle) * 20 //I'll do the physics calcs later. 
-    //arrow.velocity.y = Math.sin(angle) * 20
 
     simulation.bowDrag.projectile = null
   }
-})
+
+  //complete the terrain 
+  if (simulation.drawingTerrain && simulation.terrainAssemble.length > 3) {
+    let points = simulation.terrainAssemble
+
+    //calculate the average point in the whole polgon. 
+    let averagePoint = { x: 0, y: 0 }
+    for (let point of points) {
+      averagePoint.x += point.x
+      averagePoint.y += point.y
+    }
+    averagePoint.x /= points.length
+    averagePoint.y /= points.length
+
+    //they need to be counterclockwise order to work. Counterclockwise is angles smallest to largest 
+    points = points.sort((a, b) => {
+      let angleA = Math.atan2(a.y - averagePoint.y, a.x - averagePoint.x)
+      let angleB = Math.atan2(b.y - averagePoint.y, b.x - averagePoint.x)
+
+      return angleA - angleB
+    })
+
+    //Gonna just assume it's a convex poly for now. I'll implement a better system for this collision later. 
+    simulation.terrain.push(new Polygon(points))
+
+    //remove the assembly terrain 
+    simulation.terrainAssemble = []
+  }
+}
 
 
 //set up the sliders
@@ -165,3 +248,31 @@ function SetUpSlider (elementId, sliderMin, sliderMax, defaultValue, SetNewValue
   return UpdateValueFunction
 }
 
+/**
+ * @returns { boolean } If the mouse is inside the canvas or not. 
+ */
+function IsMouseInCanvas () {
+  //the mouse position is scalled to the canvas which is nice.
+
+  return mouse.x >= 0 && mouse.x <= 1024 && mouse.y >= 0 && mouse.y <= 1024
+}
+
+//additional buttons 
+/**
+ * @type { HTMLButtonElement }
+ */
+const drawTerrainButton = document.getElementById("drawTerrainButton")
+drawTerrainButton.addEventListener("click", () => {
+  EnableDisableTerrainDrawing()
+})
+
+function EnableDisableTerrainDrawing () {
+  if (simulation.drawingTerrain) {
+    //stop it 
+    drawTerrainButton.innerText = "Draw Terrain"
+    simulation.drawingTerrain = false
+  } else {
+    drawTerrainButton.innerText = "Stop Drawing Terrain"
+    simulation.drawingTerrain = true
+  }
+}

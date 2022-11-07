@@ -1,4 +1,5 @@
 ///<reference path="physics.js"/>
+///<reference path="libsat.js"/>
 
 interface Simulation {
   gravity: number
@@ -6,6 +7,7 @@ interface Simulation {
   uniqueId: number
 
   projectiles: Map<number, Projectile>
+  terrain: Polygon[]
 
   maxBowStretch: number
   arrowMass: number
@@ -13,6 +15,10 @@ interface Simulation {
 
   //settings
   showTrajectory: boolean
+
+  //if bow shooting or terrain drawing 
+  drawingTerrain: boolean
+  terrainAssemble: Point[]
 
   bowDrag: {
     startTime: number, 

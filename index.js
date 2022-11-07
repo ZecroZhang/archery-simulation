@@ -25,12 +25,25 @@ function Animate () {
   delta = (performance.now() - lastCheck) / 1000
   lastCheck = performance.now()
 
+  //background 
   ctx.fillStyle = "#00ffd9"
   ctx.fillRect(0, 0, canvas.width, canvas.height)
 
   ctx.fillStyle = "#2bff00"
   ctx.fillRect(0, canvas.height * 0.75, canvas.width, canvas.height)
 
+  //draw the terrain 
+  ctx.fillStyle = "#61ff8e"
+  for (let terrain of simulation.terrain) {
+    ctx.beginPath()
+    ctx.moveTo(terrain.points[0].x, terrain.points[1].y)
+    for (let point of terrain.points) {
+      ctx.lineTo(point.x, point.y)
+    }
+    ctx.fill()
+  }
+
+  //person + foreground 
   ctx.fillStyle = "#000"
   ctx.strokeStyle = "#000"
   ctx.lineWidth = 4
@@ -84,6 +97,24 @@ function Animate () {
     projectile.update(delta)
     
     projectile.draw(ctx)
+  }
+
+  //display the current terrain being drawn. 
+  if (simulation.drawingTerrain && simulation.terrainAssemble.length > 0) {
+    ctx.strokeStyle = "#00f"
+    ctx.beginPath()
+    ctx.moveTo(simulation.terrainAssemble[0].x, simulation.terrainAssemble[0].y)
+    for (let point of simulation.terrainAssemble) {
+      ctx.lineTo(point.x, point.y)
+    }
+    ctx.stroke()
+
+    //draw a circle for the current mouse point
+    let lastPoint = simulation.terrainAssemble[simulation.terrainAssemble.length-1]
+    ctx.fillStyle = "#00f"
+    ctx.beginPath()
+    ctx.arc(lastPoint.x, lastPoint.y)
+    ctx.fill()
   }
 
 

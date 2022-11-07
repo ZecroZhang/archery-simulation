@@ -11,12 +11,17 @@ const simulation = {
   uniqueId: 0,
 
   projectiles: new Map(),
+  terrain: [],
 
   //everything's in si units 
   maxBowStretch: 0.2, //20cm 
   arrowMass: 0.0162, 
   bowSpringConstant: 350,
   showTrajectory: true,
+
+  //disables the ability to shoot the bow. 
+  drawingTerrain: false, 
+  terrainAssemble: [],
 
   //bow controls
   bowDrag: {
@@ -184,10 +189,29 @@ class Projectile {
       return true 
     }
 
-    //object to object collision later
+    //object to terrain collision
+    
+    //sorry I'm rushing this, I'll make this more logical and optimized later. Pretend the arrow is a square and collision is calculated using pixels. 
+    let adjustedArrowX = projectile.position.x * simulation.pixelsToMeters
+    let adjustedArrowY = projectile.position.y * simulation.pixelsToMeters
+
+    let arrowPoly = new Polygon([
+      new Point(adjustedArrowX - 2, adjustedArrowY + 2), //bottom left 
+      new Point(adjustedArrowX + 2, adjustedArrowY + 2), //bottom right 
+      new Point(adjustedArrowX + 2, adjustedArrowY - 2), //top right 
+      new Point(adjustedArrowX - 2, adjustedArrowY - 2), //top left 
+    ])
+
+    let isTouching = false
+    for (let poly of simulation.terrain) {
+      if (poly.IsTouchingPolygon(arrowPoly)) {
+        isTouching = true
+        break
+      }
+    }
 
     //there is a 0% chance I'm doing arrow to arrow collision. 
-    return false
+    return isTouching
   }
 }
 
