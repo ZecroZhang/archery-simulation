@@ -17,30 +17,6 @@ document.addEventListener("keyup", event => {
   }
 })
 
-let item = 0
-document.addEventListener("keypress", event => {
-  //hot keys are for something, they will be removed later. 
-  if (event.code == "Digit1") {
-    if (item == 0) {
-      scFn(100 + Math.random() * 400)
-    } else if (item == 1) {
-      mdFn(0.1 + Math.random() * 0.9)
-    } else if (item == 2) {
-      amFn(0.001 + Math.random() * 0.28)
-    } else if (item == 3) {
-      gFn(Math.random() * 40)
-      item = -1
-    }
-    item ++ 
-  } else if (event.code == "Digit2") {
-    if (simulation.drawingTerrain) {
-      EnableDisableTerrainDrawing()
-    }
-  } else if (event.code == "Digit3") {
-    location.reload()
-  }
-})
-
 /**
  * Mouse position relative to the 1024x1024 canvas
  */
@@ -61,7 +37,7 @@ document.addEventListener("mousemove", event => {
 
   //check if terrain is being drawn. 
   if (mouse.isDown && simulation.drawingTerrain) {
-    simulation.terrainAssemble.push(new Point(mouse.x, mouse.y))
+    simulation.terrainAssemble.push(new Vector2d(mouse.x, mouse.y))
   }
 })
 
@@ -78,7 +54,7 @@ function HandleMouseDown () {
   if (simulation.bowDrag.projectile !== null) return 
 
   if (simulation.drawingTerrain) {
-    simulation.terrainAssemble.push(new Point(mouse.x, mouse.y))
+    simulation.terrainAssemble.push(new Vector2d(mouse.x, mouse.y))
   } else {
     //Start the bow drag.
     simulation.bowDrag.isAiming = true
@@ -104,34 +80,14 @@ function HandleMouseUp () {
     let angle = FindMouseToBodyAngle()
 
     arrow.gravityEnabled = true
-    arrow.velocity.setTo(CalculateInitialVeclotiy(simulation.bowSpringConstant, BowStretchDistance()/simulation.pixelsToMeters, simulation.arrowMass, angle))
+    arrow.velocity.setTo(CalculateInitialVelocity(simulation.bowSpringConstant, BowStretchDistance()/simulation.pixelsToMeters, simulation.arrowMass, angle))
 
     simulation.bowDrag.projectile = null
   }
 
   //complete the terrain 
   if (simulation.drawingTerrain && simulation.terrainAssemble.length > 3) {
-    let points = simulation.terrainAssemble
-
-    //calculate the average point in the whole polgon. 
-    let averagePoint = { x: 0, y: 0 }
-    for (let point of points) {
-      averagePoint.x += point.x
-      averagePoint.y += point.y
-    }
-    averagePoint.x /= points.length
-    averagePoint.y /= points.length
-
-    //they need to be counterclockwise order to work. Counterclockwise is angles smallest to largest 
-    points = points.sort((a, b) => {
-      let angleA = Math.atan2(a.y - averagePoint.y, a.x - averagePoint.x)
-      let angleB = Math.atan2(b.y - averagePoint.y, b.x - averagePoint.x)
-
-      return angleA - angleB
-    })
-
-    //Gonna just assume it's a convex poly for now. I'll implement a better system for this collision later. 
-    simulation.terrain.push(new Polygon(points))
+    simulation.terrain.push(new Terrain(simulation.terrainAssemble))
 
     //remove the assembly terrain 
     simulation.terrainAssemble = []
@@ -140,17 +96,20 @@ function HandleMouseUp () {
 
 
 //set up the sliders
-const scFn = SetUpSlider("springConstant", 100, 500, 350, (input) => {
+SetUpSlider("springConstant", 100, 500, 350, (input) => {
   simulation.bowSpringConstant = input
 })
-const mdFn = SetUpSlider("maxDrawDistance", 0.1, 1, 0.4, (input) => {
+SetUpSlider("maxDrawDistance", 0.1, 1, 0.4, (input) => {
   simulation.maxBowStretch = input
 })
-const amFn = SetUpSlider("arrowMass", 0.001, 0.3, 0.0162, (input) => {
+SetUpSlider("arrowMass", 0.001, 0.3, 0.0162, (input) => {
   simulation.arrow = input
 })
-const gFn = SetUpSlider("gravity", 0, 40, 9.8, (input) => {
+SetUpSlider("gravity", 0, 40, 9.8, (input) => {
   simulation.gravity = input
+})
+SetUpSlider("drawTime", 0, 4, 0.25, (input) => {
+  simulation.drawTime = input
 })
 
 document.getElementById("trajectoryCheckBox").addEventListener("click", event => {
@@ -164,12 +123,12 @@ document.getElementById("trajectoryCheckBox").addEventListener("click", event =>
 
 /**
  * Sets up a slider. Assumes the html elements are created for it. 
- * @param { string } elementId The is the general id of the elements. The text input should be called "`elementId`TextInput" and the slider element should be callled "`elementId`SliderInput"
+ * @param { string } elementId The is the general id of the elements. The text input should be called "`elementId`TextInput" and the slider element should be called "`elementId`SliderInput"
  * @param { number } sliderMin The min value the slider can go to.
  * @param { number } sliderMax The max value the slider can go to. 
  * @param { number } defaultValue The default value of the slider when the simulation starts. 
  * @param { NewValueFunction } SetNewValue A function to call to update the value of the simulation. Slider and text input sync is auto handled by the function. 
- * @returns { UpdateValueFunction } Function to change both the slider, textinput and call the setnewvalue
+ * @returns { UpdateValueFunction } Function to change both the slider, text input and call the SetNewValue
  */
 function SetUpSlider (elementId, sliderMin, sliderMax, defaultValue, SetNewValue) {
   /**
@@ -252,7 +211,7 @@ function SetUpSlider (elementId, sliderMin, sliderMax, defaultValue, SetNewValue
  * @returns { boolean } If the mouse is inside the canvas or not. 
  */
 function IsMouseInCanvas () {
-  //the mouse position is scalled to the canvas which is nice.
+  //the mouse position is scaled to the canvas which is nice.
 
   return mouse.x >= 0 && mouse.x <= 1024 && mouse.y >= 0 && mouse.y <= 1024
 }

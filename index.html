@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Archery Simulation</title>
 
-  <script src="libsat.js"></script>
   <script src="physics.js"></script>
   <script src="controls.js" defer></script>
   <script src="index.js" defer></script>
@@ -61,6 +60,14 @@
         <div class="rowItem">
           <textarea id="gravityTextInput" style="width: 10vw;"></textarea>
           <input type="range" id="gravitySliderInput" min=0 max=999 style="width: 15vw;"></input>
+        </div>
+
+        <div class="rowLabel">
+          <div>Draw Time(s)</div>
+        </div>
+        <div class="rowItem">
+          <textarea id="drawTimeTextInput" style="width: 10vw;"></textarea>
+          <input type="range" id="drawTimeSliderInput" min=0 max=999 style="width: 15vw;"></input>
         </div>
 
         <div class="rowItem">

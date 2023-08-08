@@ -33,14 +33,8 @@ function Animate () {
   ctx.fillRect(0, canvas.height * 0.75, canvas.width, canvas.height)
 
   //draw the terrain 
-  ctx.fillStyle = "#61ff8e"
   for (let terrain of simulation.terrain) {
-    ctx.beginPath()
-    ctx.moveTo(terrain.points[0].x, terrain.points[1].y)
-    for (let point of terrain.points) {
-      ctx.lineTo(point.x, point.y)
-    }
-    ctx.fill()
+    terrain.draw(ctx)
   }
 
   //person + foreground 
@@ -62,35 +56,44 @@ function Animate () {
   DrawCircle(150, 800, 12, "#fff")
   DrawCircle(180, 800, 12, "#fff")
 
-  //left arm positioning. 
-  DrawCircle(120, 860, 20, skinColour)
+  const arrowAngle = FindMouseToBodyAngle() + extraAngle
+  const arrowCos = Math.cos(arrowAngle)
+  const arrowSin = Math.sin(arrowAngle)
 
-  let arrowAngle = FindMouseToBodyAngle() + extraAngle
+  let bowX = arrowCos * armFromCenterDistance + 150
+  let bowY = arrowSin * armFromCenterDistance + 820
 
-  let bowX = Math.cos(arrowAngle) * armFromCenterDistance + 150
-  let bowY = Math.sin(arrowAngle) * armFromCenterDistance + 820
-
-  //right arm. They require movement :(
+  //left arm holding the bow. 
   DrawCircle(bowX, bowY, 20, skinColour)
 
   //bow. 250, 800
-  DrawBow(bowX, bowY, arrowAngle, 0)
+  let bowStretch = DrawBow(bowX, bowY, arrowAngle, 0)
 
   //update the current projectile position if there is one in the bow. 
   if (simulation.bowDrag.projectile !== null) {
     let projectile = simulation.bowDrag.projectile
 
-    projectile.position.x = bowX / simulation.pixelsToMeters
-    projectile.position.y = bowY / simulation.pixelsToMeters
+    projectile.position.x = (bowX + arrowCos*(20-bowStretch)) / simulation.pixelsToMeters
+    projectile.position.y = (bowY + arrowSin*(20-bowStretch)) / simulation.pixelsToMeters
     
-    UpdateArrowLastPositionBeforeRelease(projectile)
+    UpdateArrowLastPositionBeforeRelease(projectile, arrowAngle)
 
     if (simulation.showTrajectory) {
       CalculateAndDrawBowPath(ctx,
       projectile.position.x, projectile.position.y,
-      simulation.bowSpringConstant, BowStretchDistance() / simulation.pixelsToMeters,
+      simulation.bowSpringConstant, bowStretch / simulation.pixelsToMeters,
       simulation.arrowMass, FindMouseToBodyAngle())
     }
+
+    let leftArmX = bowX - arrowCos*(50+bowStretch)
+    let leftArmY = bowY - arrowSin*(50+bowStretch)
+
+    ctx.strokeStyle = "#000"
+    //right arm holding arrow. 
+    DrawCircle(leftArmX, leftArmY, 20, skinColour)
+  } else {
+    //right arm stationary. 
+    DrawCircle(120, 860, 20, skinColour)
   }
 
   for (let [ , projectile ] of simulation.projectiles) {
@@ -159,16 +162,19 @@ function DrawCircle (x, y, radius, colour, semi = false) {
  * @param { number } y 
  * @param { number } angle 
  * @param { number } stringPull
+ * 
+ * @returns { number } the amount in px that the bow has stretched. 
  */
 function DrawBow (x, y, angle, stringPull) {
   const radius = 60
+  let bowStretchDistance = BowStretchDistance()
 
   ctx.save()
   ctx.translate(x, y)
   ctx.rotate(angle)
 
   //control point
-  let controlPoint = simulation.bowDrag.projectile == null ? 0 : BowStretchDistance() * 2
+  let controlPoint = simulation.bowDrag.projectile == null ? 0 : bowStretchDistance * 2
   //bow string 
   ctx.lineWidth = 4
   ctx.strokeStyle = "#f2f0bc"
@@ -184,4 +190,6 @@ function DrawBow (x, y, angle, stringPull) {
   ctx.stroke()
 
   ctx.restore()
+
+  return bowStretchDistance
 }

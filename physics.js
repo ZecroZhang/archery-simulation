@@ -18,6 +18,7 @@ const simulation = {
   arrowMass: 0.0162, 
   bowSpringConstant: 350,
   showTrajectory: true,
+  drawTime: 0,
 
   //disables the ability to shoot the bow. 
   drawingTerrain: false, 
@@ -41,8 +42,8 @@ class Vector2d {
    */
   constructor (x, y) {
     //number in case if a string gets inputted. 
-    this.x = Number(x) || 0
-    this.y = Number(y) || 0
+    this.x = Number(x) ?? 0
+    this.y = Number(y) ?? 0
   }
 
   /**
@@ -52,6 +53,22 @@ class Vector2d {
   add (vector) {
     this.x += vector.x
     this.y += vector.y
+  }
+
+  /**
+   * Scale the vector up or down. 
+   * @param { number } factor 
+   */
+  scale (factor) {
+    this.x *= factor
+    this.y *= factor
+  }
+
+  /**
+   * @returns { Vector2d } another vector. 
+   */
+  clone () {
+    return new Vector2d(this.x, this.y)
   }
 
   /**
@@ -76,6 +93,23 @@ class Vector2d {
   setTo (vector) {
     this.x = vector.x
     this.y = vector.y
+  }
+
+  /**
+   * Distance to the other vector. 
+   * @param { Vector2d } vector 
+   * @returns { number } dist
+   */
+  distanceTo (vector) {
+    return Math.hypot(this.x - vector.x, this.y - vector.y)
+  }
+
+  /**
+   * Converts this to an array. 
+   * @returns { [ number, number ] } (x, y)
+   */
+  toArray () {
+    return [ this.x, this.y ]
   }
 }
 
@@ -121,7 +155,9 @@ class Projectile {
     this.position.y += this.velocity.y * delta
 
     //check if colliding with anything. The ground is anything below canvas.height(1024) * 0.90
-    if (Projectile.HasCollided(this, false)) {
+    let point = Projectile.CollisionPoint(this, false) 
+    if (point) {
+      this.position = point
       this.gravityEnabled = false
       this.velocity.reset()
     }
@@ -181,37 +217,199 @@ class Projectile {
    * Checks if the object is hitting anything and react accordingly 
    * @param { Projectile } projectile 
    * @param { boolean } ghostObject If the collision should affect other objects. Use false for the predicted paths. 
-   * @returns { boolean } If the object is hitting 
+   * @returns { Vector2d | null } If the object is hitting. Vec is in meters not px. 
    */
-  static HasCollided (projectile, ghostObject = false) {
+  static CollisionPoint (projectile, ghostObject = false) {
+    let travelLine = new LineSegment(projectile.lastPosition, projectile.position)
+
     //ground collision.
     if (projectile.position.y * simulation.pixelsToMeters > 921.6) {
-      return true 
+      const groundY = 921.6 / simulation.pixelsToMeters
+      //Move along the line back to where it intersects with the ground. Where the y value = the ground y value. 
+      let t = (travelLine.point.y - groundY) / travelLine.dirVec.y
+
+      //Subtract because it needs to go towards the current position from the last position, but the first argument of LineSegment is the point on the line which is set to lastPosition. 
+      return new Vector2d(
+        travelLine.point.x - travelLine.dirVec.x * t,
+        groundY
+      )
     }
 
     //object to terrain collision
-    
-    //sorry I'm rushing this, I'll make this more logical and optimized later. Pretend the arrow is a square and collision is calculated using pixels. 
-    let adjustedArrowX = projectile.position.x * simulation.pixelsToMeters
-    let adjustedArrowY = projectile.position.y * simulation.pixelsToMeters
+    travelLine.scale(simulation.pixelsToMeters)
 
-    let arrowPoly = new Polygon([
-      new Point(adjustedArrowX - 2, adjustedArrowY + 2), //bottom left 
-      new Point(adjustedArrowX + 2, adjustedArrowY + 2), //bottom right 
-      new Point(adjustedArrowX + 2, adjustedArrowY - 2), //top right 
-      new Point(adjustedArrowX - 2, adjustedArrowY - 2), //top left 
-    ])
+    /**
+     * @type { Vector2d | null }
+     */
+    let intersectionPoint = null
 
-    let isTouching = false
-    for (let poly of simulation.terrain) {
-      if (poly.IsTouchingPolygon(arrowPoly)) {
-        isTouching = true
+    for (let terrain of simulation.terrain) {
+      intersectionPoint = terrain.isTouchingLineSegment(travelLine, travelLine.point) //the point is the last position(first argument)
+
+      if (intersectionPoint) {
         break
       }
     }
+    
+    if (intersectionPoint) {
+      intersectionPoint.scale(1/simulation.pixelsToMeters)
+    }
 
     //there is a 0% chance I'm doing arrow to arrow collision. 
-    return isTouching
+    return intersectionPoint
+  }
+}
+
+class LineSegment {
+  /**
+   * Creates a line segment. 
+   * @param { Vector2d } point1 
+   * @param { Vector2d } point2 
+   */
+  constructor (point1, point2) {
+    this.point = new Vector2d(point1.x, point1.y)
+    this.dirVec = new Vector2d(
+      point2.x - point1.x,
+      point2.y - point1.y
+    )
+  }
+
+  /**
+   * Point of intersection with another line, or null. 
+   * @param { LineSegment } line 
+   * @returns { Vector2d | null } vec2d for the intersection point. `null` is returned if the lines don't intersect or are coincident.
+   */
+  intersectionPoint (line) {
+    //https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection#Given_two_points_on_each_line_segment
+    
+    //Let this line's point be (x1, x2) and the direction vector be (dx, dy). Let the other line's point be (x3, y3) and dir vec be (mx, my)
+    //bottom det = det [ (-dx) (-mx) ] = (dx)(my) - (dy)(mx)
+    //                 [ (-dy) (-my) ]
+    let bottomDet = ( this.dirVec.x * line.dirVec.y ) - (this.dirVec.y * line.dirVec.x)
+    
+    if (bottomDet == 0) {
+      return null
+    }
+
+    //t's top det = det [ (x1-x3) (-mx) ] = (x1-x3)(-my) - (y1-y3)(-mx) = (x3-x1)(my) + (y1-y3)(mx)
+    //                  [ (y1-y3) (-my) ]
+    let tTopDet = (line.point.x-this.point.x)*line.dirVec.y + (this.point.y-line.point.y)*line.dirVec.x
+
+    //Same as t's but the second column is flipped... kinda
+    //u's top det = det [ (x1-x3) (-dx) ] = (x3-x1)(dy) + (y1-y3)(dx)
+    //                  [ (y1-y3) (-dy) ]
+    let uTopDet = (line.point.x-this.point.x)*this.dirVec.y + (this.point.y-line.point.y)*this.dirVec.x
+
+    //Invert all of them, if negative. 
+    if (bottomDet < 0) {
+      tTopDet = -tTopDet
+      uTopDet = -uTopDet
+      bottomDet = -bottomDet
+    }
+
+    //Check if there isn't an intersection. Ie, when t and u are calculated they are not in the range [0, 1]
+    if (!(0 <= tTopDet && tTopDet <= bottomDet) || !(0 <= uTopDet && uTopDet <= bottomDet)) {
+      return null 
+    }
+
+    let t = tTopDet / bottomDet
+    // let u = uTopDet / bottomDet
+
+    let point = new Vector2d(
+      this.point.x + t*this.dirVec.x,
+      this.point.y + t*this.dirVec.y
+    )
+
+    return point
+  }
+
+  /**
+   * This scales both the point and the direction vector by that factor. 
+   * @param { number } factor 
+   */
+  scale (factor) {
+    this.point.scale(factor)
+    this.dirVec.scale(factor)
+  }
+}
+
+class Terrain {
+  /**
+   * 
+   * @param { {x: number, y: number}[] } points 
+   */
+  constructor (points) {
+    /**
+     * @type { LineSegment[] }
+     */
+    this.lines = []
+
+    //Need at least 2 points
+    if (points.length < 2) {
+      return
+    }
+
+    //Loop from the first item to, and including, the second last. 
+    for (let i = 0; i < points.length-1; i++) {
+      this.lines.push(new LineSegment(points[i], points[i+1]))
+    }
+
+    //Push last for the loop around. 
+    this.lines.push(new LineSegment(points[points.length-1], points[0]))
+  }
+
+  /**
+   * Draws the terrain on canvas.
+   * @param { CanvasRenderingContext2D } ctx
+   */
+  draw (ctx) {
+    ctx.fillStyle = "#61ff8e"
+    ctx.strokeStyle = "#00ff00"
+
+    ctx.beginPath()
+    ctx.moveTo(this.lines[0].point.x, this.lines[0].point.y)
+    //Too lazy to remove the redundancy where it draws a point twice at the start of the line. 
+    for (let line of this.lines) {
+      let point = line.point
+      ctx.lineTo(point.x, point.y)
+    }
+    ctx.lineTo(this.lines[0].point.x, this.lines[0].point.y)
+    ctx.fill()
+    ctx.stroke()
+  }
+
+  /**
+   * If the line's touching the terrain. The line should be the projectile's path. 
+   * @param { LineSegment } line 
+   * @param { Vector2d } lastPosition this is the point we'll find an intersection closest to. 
+   * @returns { Vector2d | null } Point of intersection if there is one, or none. There is a possibility of the line segment being coincident with one of the sides resulting in a null getting returned... 
+   * @todo Optimize this using boxes so if the line's far away it doesn't need to check all the line segments. Also maybe fix the coincident line issue?  
+   */
+  isTouchingLineSegment (line, lastPosition) {
+    let point = null
+    let distance = Infinity
+
+    for (let terrainLine of this.lines) {
+      let otherPoint = terrainLine.intersectionPoint(line)
+      if (!otherPoint) {
+        continue
+      }
+
+      if (!point) {
+        point = otherPoint
+        distance = point.distanceTo(lastPosition)
+        continue
+      }
+
+      //Both = find closest one. 
+      let otherDist = otherPoint.distanceTo(lastPosition)
+      if (otherDist < distance) {
+        distance = otherDist
+        point = otherPoint
+      }
+    }
+    
+    return point
   }
 }
 
@@ -253,21 +451,22 @@ function FindMouseToBodyAngle () {
 /**
  * Sets the arrow so it's aimed correctly. 
  * @param { Projectile } projectile Arrow. 
+ * @param { number } arrowAngle angle the arrow makes with the body(also the angle of the bow).
  */
-function UpdateArrowLastPositionBeforeRelease (projectile) {
-  projectile.lastPosition.setTo(ArrowLastPosition(FindMouseToBodyAngle() + Math.PI, projectile.position.x, projectile.position.y))
+function UpdateArrowLastPositionBeforeRelease (projectile, arrowAngle) {
+  projectile.lastPosition.setTo(ArrowLastPosition(arrowAngle + Math.PI, projectile.position.x, projectile.position.y))
 }
 
 /**
  * Calculates the final velocity of the arrow. All calcs are done in SI units. Assumes all energy is conserved.
  * **Note:** y component is flipped because the js canvas is flipped. 
  * @param { number } springConstant N/m
- * @param { number } stretch How far the bow is pulled from the equlibrium point in PX. 
+ * @param { number } stretch How far the bow is pulled from the equilibrium point in PX. 
  * @param { number } mass Mass of arrow in kg. 
  * @param { number } angle Angle of the arrow. 
  * @returns { Vector2d } Vector for x, y.
  */
-function CalculateInitialVeclotiy (springConstant, stretch, mass, angle) {
+function CalculateInitialVelocity (springConstant, stretch, mass, angle) {
   /**
    * Ee = Ek 
    * k*x^2/2 = mv^2/2
@@ -285,7 +484,7 @@ function CalculateInitialVeclotiy (springConstant, stretch, mass, angle) {
  * @param { number } x x pos in meters
  * @param { number } y y pos in meters
  * @param { number } springConstant N/m
- * @param { number } stretch How far the bow is pulled from the equlibrium point in meters. 
+ * @param { number } stretch How far the bow is pulled from the equilibrium point in meters. 
  * @param { number } mass Mass of arrow in kg. 
  * @param { number } angle Angle of the arrow. 
  */
@@ -298,27 +497,32 @@ function CalculateAndDrawBowPath (ctx, x, y, springConstant, stretch, mass, angl
   ctx.beginPath()
   ctx.moveTo(x * simulation.pixelsToMeters, y * simulation.pixelsToMeters)
 
-  let velocity = CalculateInitialVeclotiy(springConstant, stretch, mass, angle)
+  let velocity = CalculateInitialVelocity(springConstant, stretch, mass, angle)
 
-  let delta = 0.05 //using 50 ms increments 
+  const delta = 0.05 //using 50 ms increments 
+  let testProjectile = new Projectile(x, y, velocity.x, velocity.y, 1)
+  
   //going to take steps so it uses lines instead of a curve. 
   for (let i = 0; i < 200; i++) {
-    velocity.y += simulation.gravity * delta
+    testProjectile.update(delta)
 
-    x += velocity.x * delta 
-    y += velocity.y * delta 
+    let drawVec = testProjectile.position.clone()
+    drawVec.scale(simulation.pixelsToMeters)
+    ctx.lineTo(...drawVec.toArray())
 
-    ctx.lineTo(x * simulation.pixelsToMeters, y * simulation.pixelsToMeters)
-
-    //do hit detection check. Typescript would scream at me if I did this. 
-    if (Projectile.HasCollided({ position: { x, y } }, true)) {
-      break //it's touching the object so the path ends here. 
+    //It hit something. 
+    if (!testProjectile.gravityEnabled) {
+      break
     }
+
   }
 
   ctx.stroke()
-  ctx.setLineDash([]) //dotted lines
+  ctx.setLineDash([]) //no more dotted lines
 
+  x = testProjectile.position.x
+  y = testProjectile.position.y
+  
   //end point 
   ctx.beginPath()
   ctx.arc(x * simulation.pixelsToMeters, y * simulation.pixelsToMeters, 10, 0, Math.PI*2)
@@ -326,15 +530,18 @@ function CalculateAndDrawBowPath (ctx, x, y, springConstant, stretch, mass, angl
 }
 
 /**
- * Bow string strectched from eqlulib in pixels 
- * @returns { number } Distance the bow string was streched from the equlibrium point in px. 
+ * Bow string stretched from equilibrium in pixels 
+ * @returns { number } Distance the bow string was stretched from the equilibrium point in px. 
  */
 function BowStretchDistance () {
-  let distance = (performance.now() - simulation.bowDrag.startTime) / 20 
+  let distance = ((performance.now() - simulation.bowDrag.startTime) / simulation.drawTime) * 0.001 * simulation.maxBowStretch
+  //the 0.001 is bc the perf time is in ms. 
 
-  if (distance/simulation.pixelsToMeters > simulation.maxBowStretch) {
-    distance = simulation.maxBowStretch * simulation.pixelsToMeters
+  if (distance > simulation.maxBowStretch) {
+    distance = simulation.maxBowStretch
   }
+
+  distance *= simulation.pixelsToMeters 
 
   return distance
 }
